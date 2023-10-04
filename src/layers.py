@@ -7,7 +7,7 @@ class SAGE(torch.nn.Module):
     """
     SAGE layer class.
     """
-    def __init__(self, args, number_of_features):
+    def __init__(self, args, number_of_features, number_of_labels):
         """
         Creating a SAGE layer.
         :param args: Arguments object.
@@ -16,6 +16,7 @@ class SAGE(torch.nn.Module):
         super(SAGE, self).__init__()
         self.args = args
         self.number_of_features = number_of_features
+        self.number_of_labels = number_of_labels
         self._setup()
 
     def _setup(self):
@@ -33,6 +34,9 @@ class SAGE(torch.nn.Module):
 
         self.fully_connected_2 = torch.nn.Linear(self.args.first_dense_neurons,
                                                  self.args.second_dense_neurons)
+        
+        self.fully_connected_3 = torch.nn.Linear(self.args.second_dense_neurons*self.args.second_gcn_dimensions,
+                                                 self.number_of_labels)
 
     def forward(self, data):
         """
@@ -51,7 +55,8 @@ class SAGE(torch.nn.Module):
         graph_embedding = graph_embedding.view(1, -1)
         penalty = torch.mm(torch.t(attention), attention)-torch.eye(self.args.second_dense_neurons)
         penalty = torch.sum(torch.norm(penalty, p=2, dim=1))
-        return graph_embedding, penalty
+        l_prediction = torch.nn.functional.log_softmax(self.fully_connected_3(graph_embedding), dim=1)
+        return l_prediction, graph_embedding, penalty
 
 class MacroGCN(torch.nn.Module):
     """
@@ -110,7 +115,7 @@ class SEAL(torch.nn.Module):
         """
         Creating a two stage model/
         """
-        self.graph_level_model = SAGE(self.args, self.number_of_features)
+        self.graph_level_model = SAGE(self.args, self.number_of_features,self.number_of_labels)
         self.hierarchical_model = MacroGCN(self.args,
                                            self.args.second_gcn_dimensions*self.args.second_dense_neurons,
                                            self.number_of_labels)
@@ -125,11 +130,14 @@ class SEAL(torch.nn.Module):
         """
         embeddings = []
         penalties = 0
+        l_predictions = []
         for graph in graphs:
-            embedding, penalty = self.graph_level_model(graph)
+            l_prediction, embedding, penalty = self.graph_level_model(graph)
+            l_predictions.append(l_prediction)
             embeddings.append(embedding)
             penalties = penalties + penalty
+        l_predictions = torch.cat(tuple(l_predictions))
         embeddings = torch.cat(tuple(embeddings))
         penalties = penalties/len(graphs)
-        predictions = self.hierarchical_model(embeddings, macro_edges)
-        return predictions, penalties
+        h_predictions = self.hierarchical_model(embeddings, macro_edges)
+        return l_predictions, h_predictions, penalties

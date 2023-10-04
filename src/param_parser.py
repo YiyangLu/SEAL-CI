@@ -26,7 +26,7 @@ def parameter_parser():
 
     parser.add_argument("--budget",
                         type=int,
-                        default=20,
+                        default=400,
 	                help="Number of data points added in learning phase. Default is 20.")
 
     parser.add_argument("--first-gcn-dimensions",
@@ -56,7 +56,7 @@ def parameter_parser():
 
     parser.add_argument("--epochs",
                         type=int,
-                        default=10,
+                        default=30,
 	                help="Number of epochs. Default is 10.")
 
     parser.add_argument("--learning-rate",
